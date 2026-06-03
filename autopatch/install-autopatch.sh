@@ -49,7 +49,6 @@ cat > "$PLIST" <<EOF
   <dict><key>PATH</key><string>$PATH_VALUE</string></dict>
   <key>WatchPaths</key>
   <array><string>$ASAR</string></array>
-  <key>StartInterval</key><integer>21600</integer>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>$LOG</string>
   <key>StandardErrorPath</key><string>$LOG</string>

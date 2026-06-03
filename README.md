@@ -166,11 +166,12 @@ chmod +x install-autopatch.sh uninstall-autopatch.sh
 ./install-autopatch.sh
 ```
 
-This installs a LaunchAgent that watches `app.asar` and re-applies the patch the
-moment Codex updates (the macOS analog of the Windows scheduled-task watcher). It
-needs a one-time **Full Disk Access** grant for `/bin/bash` — macOS 14+ blocks
-background agents from modifying `/Applications`. The installer opens the pane and
-explains it.
+This installs a LaunchAgent that watches `app.asar`. **By default it only detects
+updates and notifies you** (run `./install.sh` once after the notification) —
+macOS 14+ App Management protection blocks a background agent from rewriting an
+app in `/Applications`. For **fully automatic** re-applying, grant the agent's
+`/bin/bash` a one-time **Full Disk Access** (designed-but-not-yet-end-to-end-
+verified). See [`autopatch/README.md`](autopatch/README.md).
 
 ### Uninstall (macOS)
 
