@@ -1,0 +1,17 @@
+# Local installs and copied app bundles
+CodexRtl/
+app/
+*.asar
+*.bak
+
+# Logs and temp output
+*.log
+*.tmp
+tmp/
+temp/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
