@@ -25,10 +25,13 @@ ASAR_PKG="@electron/asar@4.2.0"
 DRY_RUN=0
 LAUNCH=1
 
+IF_NEEDED=0; NOTIFY=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;
     --no-launch) LAUNCH=0 ;;
+    --if-needed) IF_NEEDED=1 ;;   # exit early if already patched (for the auto-patch agent)
+    --notify) NOTIFY=1 ;;          # post a macOS notification after a (re)patch
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -25; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
@@ -74,6 +77,24 @@ PLIST="$APP/Contents/Info.plist"
 [[ -f "$ASAR" ]]  || die "app.asar not found at: $ASAR"
 [[ -f "$PLIST" ]] || die "Info.plist not found at: $PLIST"
 ok "Found Codex: $APP"
+
+# Idempotent guard for the auto-patch agent: the injected asset reference
+# survives inside the (uncompressed) asar, so a raw grep tells us if we patched.
+if [[ "$IF_NEEDED" == 1 ]] && grep -qa "codex-rtl-patch.js" "$ASAR" 2>/dev/null; then
+  ok "Already patched — nothing to do."
+  exit 0
+fi
+
+# Preflight: macOS 14+ "App Management" protection blocks modifying /Applications
+# apps unless the running program has Full Disk Access. A background LaunchAgent
+# typically does NOT, so fail fast with guidance.
+if [[ "$DRY_RUN" == 0 ]] && ! ( : > "$RES/.rtl-write-test" ) 2>/dev/null; then
+  [[ "$NOTIFY" == 1 ]] && osascript -e 'display notification "Codex updated, but I lack permission to re-apply RTL. Grant /bin/bash Full Disk Access, or run install.sh in Terminal." with title "Codex RTL"' 2>/dev/null || true
+  die "Cannot write to $APP (macOS App Management protection).
+     Grant Full Disk Access to the program running this (System Settings >
+     Privacy & Security > Full Disk Access > + > Cmd+Shift+G > /bin/bash), then re-run."
+fi
+rm -f "$RES/.rtl-write-test" 2>/dev/null || true
 
 # --- obtain the patch JS ----------------------------------------------------
 PATCH_JS="$PATCH_JS_SRC"
@@ -179,6 +200,10 @@ else
 fi
 
 ok "RTL patch v$PATCH_VERSION installed"
+
+if [[ "$NOTIFY" == 1 && "$DRY_RUN" == 0 ]]; then
+  osascript -e 'display notification "RTL re-applied after a Codex update. Restart Codex." with title "Codex RTL"' 2>/dev/null || true
+fi
 
 # --- relaunch ---------------------------------------------------------------
 if [[ "$LAUNCH" == 1 && "$DRY_RUN" == 0 ]]; then

@@ -157,8 +157,20 @@ Codex sign-in (Codex auth lives in `~/.codex`, not the Chromium keychain).
 
 ### Update after Codex updates
 
-A Codex auto-update overwrites `app.asar` and reverts the patch. Just re-run
-`./install.sh`.
+A Codex auto-update overwrites `app.asar` and reverts the patch. Either re-run
+`./install.sh`, or install the **auto-patch agent** so it re-applies automatically:
+
+```bash
+cd autopatch
+chmod +x install-autopatch.sh uninstall-autopatch.sh
+./install-autopatch.sh
+```
+
+This installs a LaunchAgent that watches `app.asar` and re-applies the patch the
+moment Codex updates (the macOS analog of the Windows scheduled-task watcher). It
+needs a one-time **Full Disk Access** grant for `/bin/bash` — macOS 14+ blocks
+background agents from modifying `/Applications`. The installer opens the pane and
+explains it.
 
 ### Uninstall (macOS)
 
