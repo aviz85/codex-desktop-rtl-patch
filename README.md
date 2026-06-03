@@ -1,10 +1,14 @@
 # Codex Desktop RTL Patch
 
-Unofficial local RTL patch for Codex Desktop on Windows.
+Unofficial local RTL patch for Codex Desktop on **Windows and macOS**.
 
 This patch improves Hebrew, Arabic, and mixed right-to-left text rendering in
 Codex Desktop while keeping code blocks, inline code, terminals, and editor-like
 surfaces left-to-right.
+
+> **macOS support** was added in this fork. The RTL patch logic
+> (`src/codex-rtl-patch.js`) is shared across platforms; only the installer
+> differs. See [macOS](#macos) below. Windows instructions are unchanged.
 
 ## What It Does
 
@@ -108,6 +112,62 @@ Remove-Item "$([Environment]::GetFolderPath('Desktop'))\Codex RTL.lnk" -Force
 
 Uninstall removes only the local RTL copy and shortcut. It does not remove or
 modify the official Codex installation.
+
+## macOS
+
+The macOS installer patches the app **in place** under `/Applications/Codex.app`
+and keeps timestamped backups, so it is fully reversible. It does not copy,
+re-sign, or redistribute Codex.
+
+### Requirements
+
+- macOS.
+- Codex Desktop installed (`/Applications/Codex.app`).
+- Node.js 22+ with `npm` (ships with Node).
+
+### Install
+
+```bash
+git clone https://github.com/aviz85/codex-desktop-rtl-patch.git
+cd codex-desktop-rtl-patch
+chmod +x install.sh uninstall.sh
+./install.sh
+```
+
+Options: `./install.sh --dry-run` (change nothing), `./install.sh --no-launch`,
+or `CODEX_APP=/path/to/Codex.app ./install.sh` to override the app location.
+
+### How it works on macOS
+
+1. Quits Codex if running.
+2. Backs up `Contents/Resources/app.asar` and `Contents/Info.plist` (once).
+3. Extracts the asar, drops `codex-rtl-patch.js` into `webview/assets/`, and
+   references it from `webview/index.html`, then repacks the asar.
+4. **Recomputes the Electron ASAR integrity hash.** macOS Electron builds embed
+   the expected asar header hash in `Info.plist`
+   (`ElectronAsarIntegrity → Resources/app.asar → hash`) and abort on launch with
+   `FATAL: Integrity check failed` if the asar changed. The installer computes the
+   new `sha256` of the patched asar header and writes it back to `Info.plist`.
+   This is the key step the Windows installer does not need.
+5. Relaunches Codex.
+
+A harmless `Keychain lookup failed (errSecAuthFailed)` line may appear in the
+logs — it is a side effect of modifying a signed bundle and does not affect
+Codex sign-in (Codex auth lives in `~/.codex`, not the Chromium keychain).
+
+### Update after Codex updates
+
+A Codex auto-update overwrites `app.asar` and reverts the patch. Just re-run
+`./install.sh`.
+
+### Uninstall (macOS)
+
+```bash
+./uninstall.sh
+```
+
+This restores the original `app.asar` and `Info.plist` from the backups and
+relaunches the unpatched app.
 
 ## Safety Notice
 
