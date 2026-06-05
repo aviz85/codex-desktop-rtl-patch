@@ -140,16 +140,29 @@ or `CODEX_APP=/path/to/Codex.app ./install.sh` to override the app location.
 ### How it works on macOS
 
 1. Quits Codex if running.
-2. Backs up `Contents/Resources/app.asar` and `Contents/Info.plist` (once).
+2. Backs up `app.asar` and `Info.plist` **outside the bundle**, in
+   `~/Library/Application Support/codex-rtl-patch/` (once). Backups must not live
+   inside `Contents/` — a stray file there invalidates the code signature.
 3. Extracts the asar, drops `codex-rtl-patch.js` into `webview/assets/`, and
    references it from `webview/index.html`, then repacks the asar.
 4. **Recomputes the Electron ASAR integrity hash.** macOS Electron builds embed
    the expected asar header hash in `Info.plist`
-   (`ElectronAsarIntegrity → Resources/app.asar → hash`) and abort on launch with
-   `FATAL: Integrity check failed` if the asar changed. The installer computes the
-   new `sha256` of the patched asar header and writes it back to `Info.plist`.
-   This is the key step the Windows installer does not need.
-5. Relaunches Codex.
+   (`ElectronAsarIntegrity → Resources/app.asar → hash`) and abort on launch
+   (SIGTRAP) if the asar changed. The installer computes the new `sha256` of the
+   patched asar **header string** and writes it back to `Info.plist`.
+5. **Re-signs the app (ad-hoc).** Editing `app.asar` + `Info.plist` breaks the
+   code signature; on Apple Silicon / hardened-runtime builds macOS then refuses
+   to launch ("Codex can't be opened"). The installer re-signs the top level only
+   (nested OpenAI frameworks keep their signatures) with
+   `disable-library-validation` so the now-ad-hoc main process can still load
+   OpenAI's Electron Framework. `spctl` will report "rejected" afterwards — that
+   is expected and harmless for an unquarantined local app.
+6. Relaunches Codex.
+
+Run `./check-macos.sh` any time to confirm the patched app is launch-safe
+(signature valid + integrity hashes match + patch present).
+
+> The installer is written to parse and run on macOS's stock `bash` 3.2.
 
 A harmless `Keychain lookup failed (errSecAuthFailed)` line may appear in the
 logs — it is a side effect of modifying a signed bundle and does not affect

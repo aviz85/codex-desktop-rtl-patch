@@ -20,7 +20,7 @@
 #
 set -euo pipefail
 
-PATCH_VERSION="0.1.0"
+PATCH_VERSION="0.2.0"
 ASAR_PKG="@electron/asar@4.2.0"
 DRY_RUN=0
 LAUNCH=1
@@ -74,6 +74,11 @@ APP="$(find_codex)" || die "Codex.app not found. Set CODEX_APP=/path/to/Codex.ap
 RES="$APP/Contents/Resources"
 ASAR="$RES/app.asar"
 PLIST="$APP/Contents/Info.plist"
+# Backups live OUTSIDE the .app — a stray file inside Contents/ invalidates the
+# code signature ("code object is not signed at all / In subcomponent: ...").
+BACKUP_DIR="$HOME/Library/Application Support/codex-rtl-patch"
+ASAR_BAK="$BACKUP_DIR/app.asar.orig-backup"
+PLIST_BAK="$BACKUP_DIR/Info.plist.orig-backup"
 [[ -f "$ASAR" ]]  || die "app.asar not found at: $ASAR"
 [[ -f "$PLIST" ]] || die "Info.plist not found at: $PLIST"
 ok "Found Codex: $APP"
@@ -121,11 +126,12 @@ fi
 
 # --- backups (once) ---------------------------------------------------------
 step "Backing up originals"
-if [[ ! -f "$ASAR.orig-backup" ]]; then
-  run cp "$ASAR" "$ASAR.orig-backup"; ok "Backed up app.asar -> app.asar.orig-backup"
+run mkdir -p "$BACKUP_DIR"
+if [[ ! -f "$ASAR_BAK" ]]; then
+  run cp "$ASAR" "$ASAR_BAK"; ok "Backed up app.asar -> $ASAR_BAK"
 else ok "app.asar backup already exists (kept)"; fi
-if [[ ! -f "$PLIST.orig-backup" ]]; then
-  run cp "$PLIST" "$PLIST.orig-backup"; ok "Backed up Info.plist -> Info.plist.orig-backup"
+if [[ ! -f "$PLIST_BAK" ]]; then
+  run cp "$PLIST" "$PLIST_BAK"; ok "Backed up Info.plist -> $PLIST_BAK"
 else ok "Info.plist backup already exists (kept)"; fi
 
 # --- workspace with @electron/asar -----------------------------------------
@@ -189,14 +195,61 @@ if /usr/libexec/PlistBuddy -c "Print :ElectronAsarIntegrity:Resources/app.asar:h
   if [[ "$DRY_RUN" == 1 ]]; then
     echo "DRY RUN compute sha256 of patched asar header + set Info.plist hash"
   else
-    NEW_HASH="$(node -e 'const a=require("@electron/asar"),c=require("crypto");process.stdout.write(c.createHash("sha256").update(a.getRawHeader(process.argv[1]).headerString).digest("hex"))' "$ASAR" --prefix "$WORK" 2>/dev/null || \
-      ( cd "$WORK" && node -e 'const a=require("@electron/asar"),c=require("crypto");process.stdout.write(c.createHash("sha256").update(a.getRawHeader(process.argv[1]).headerString).digest("hex"))' "$ASAR" ))
+    # Compute sha256 of the patched asar header (= the ElectronAsarIntegrity hash).
+    # Written to a temp .js file rather than an inline `node -e "..."` inside a
+    # command substitution: the nested-quote form breaks macOS's stock bash 3.2.
+    HASH_JS="$WORK/asar-hash.js"
+    cat > "$HASH_JS" <<'JS'
+const a = require("@electron/asar"), c = require("crypto");
+process.stdout.write(c.createHash("sha256").update(a.getRawHeader(process.argv[2]).headerString).digest("hex"));
+JS
+    NEW_HASH="$( cd "$WORK" && node "$HASH_JS" "$ASAR" )"
     [[ -n "$NEW_HASH" ]] || die "Failed to compute new asar integrity hash"
     /usr/libexec/PlistBuddy -c "Set :ElectronAsarIntegrity:Resources/app.asar:hash $NEW_HASH" "$PLIST"
     ok "Set ElectronAsarIntegrity hash to $NEW_HASH"
   fi
 else
   warn "No ElectronAsarIntegrity in Info.plist (older build) — skipping integrity update"
+fi
+
+# --- macOS-specific: re-sign so the modified bundle will launch --------------
+# Editing app.asar + Info.plist invalidates the app's code signature. On Apple
+# Silicon (and any hardened-runtime build) macOS refuses to launch an app whose
+# signature is broken — the symptom is "The application Codex can't be opened."
+# Re-sign TOP-LEVEL ONLY (no --deep) so the nested, OpenAI-signed Electron
+# frameworks/helpers keep their valid signatures + entitlements. The now-ad-hoc
+# main process must load OpenAI's Electron Framework, so the entitlements include
+# disable-library-validation (plus the JIT entitlements Electron needs). Team-
+# bound entitlements are dropped — Codex auth is file-based (~/.codex), not
+# keychain. `spctl` will then say "rejected" (ad-hoc, not notarized); that is
+# expected and harmless for an unquarantined local app.
+step "Re-signing Codex.app (ad-hoc)"
+if [[ "$DRY_RUN" == 1 ]]; then
+  echo "DRY RUN codesign --force --options runtime --entitlements <ent> --sign - \"$APP\""
+else
+  ENT="$WORK/codex-resign.entitlements"
+  cat > "$ENT" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key><true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+  <key>com.apple.security.automation.apple-events</key><true/>
+  <key>com.apple.security.device.audio-input</key><true/>
+  <key>com.apple.security.files.user-selected.read-write</key><true/>
+  <key>com.apple.security.network.client</key><true/>
+</dict>
+</plist>
+PLIST
+  codesign --force --options runtime --entitlements "$ENT" --sign - "$APP" \
+    || die "codesign failed — bundle is patched but unsigned and will not launch"
+  if codesign --verify --verbose=1 "$APP" >/dev/null 2>&1; then
+    ok "Re-signed (ad-hoc) — signature valid"
+  else
+    warn "Re-signed but 'codesign --verify' reports issues; the app may still launch"
+  fi
 fi
 
 ok "RTL patch v$PATCH_VERSION installed"
@@ -216,9 +269,10 @@ cat <<EOF
 
 Done. To revert:
   ./uninstall.sh
-or manually restore the backups:
-  cp "$ASAR.orig-backup"  "$ASAR"
-  cp "$PLIST.orig-backup" "$PLIST"
+or manually restore the backups (then re-sign, or reinstall Codex for the
+original notarized signature):
+  cp "$ASAR_BAK"  "$ASAR"
+  cp "$PLIST_BAK" "$PLIST"
 
 Note: a Codex auto-update overwrites app.asar and reverts the patch — just
 re-run this installer afterwards.
