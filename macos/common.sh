@@ -102,7 +102,14 @@ source_key() {
 
 app_process_running() {
   local app="$1"
-  pgrep -f "^$app/" >/dev/null 2>&1
+  # Must anchor to Contents/MacOS/ (the main executable), not just "$app/" —
+  # these OpenAI apps spawn long-lived helpers (crashpad handlers, the
+  # computer-use/cua_node service, browser extension hosts) under
+  # Contents/Frameworks/ and Contents/Resources/ that keep running well
+  # after the user quits the actual app window. Matching the whole bundle
+  # path made this always true, so every launch fell through to "official
+  # app already running" even with the app fully quit.
+  pgrep -f "^$app/Contents/MacOS/" >/dev/null 2>&1
 }
 
 notify_user() {
