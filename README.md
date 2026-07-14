@@ -11,18 +11,43 @@ This repository supports:
 
 The official OpenAI app is never redistributed.
 
+## Two products: Codex RTL and ChatGPT RTL
+
+OpenAI has folded Codex into the ChatGPT desktop app — the current build of
+`ChatGPT.app` reports bundle identifier `com.openai.codex` and lists `Codex`
+as an alternate name. This repo ships two independent, identically-built
+products so both the old and the current app are covered without either one
+touching the other:
+
+| Product | Installer | Targets | Launcher | Support data |
+| --- | --- | --- | --- | --- |
+| **Codex RTL** (default) | `./install.sh` | `ChatGPT.app`, falling back to `Codex.app` | `~/Applications/Codex RTL.app` | `~/Library/Application Support/codex-rtl-patch/` |
+| **ChatGPT RTL** | `./install-chatgpt.sh` | `ChatGPT.app` only | `~/Applications/ChatGPT RTL.app` | `~/Library/Application Support/chatgpt-rtl-patch/` |
+
+They share the same patch source (`src/codex-rtl-patch.js`) and the same
+fail-open build/validate/activate machinery (`macos/`), selected via a single
+`CODEX_RTL_BRAND` environment variable (`codex` default, or `chatgpt`) — see
+[macOS architecture](docs/MACOS-ARCHITECTURE.md). Each product gets its own
+bundle identifiers, LaunchAgent, and support directory, so installing one
+never modifies or removes the other. If your machine only has `ChatGPT.app`,
+install **ChatGPT RTL**; if you still run the legacy `Codex.app`, the default
+**Codex RTL** installer keeps working exactly as before.
+
+Do not run both launcher apps at the same time: they build isolated runtime
+copies of the same underlying app and would race for the same user profile
+data if opened simultaneously.
+
 ## macOS: safety first
 
 The macOS design has one non-negotiable rule:
 
 > If RTL compatibility cannot be proven, open the official app without RTL.
 
-The installer never modifies `/Applications/ChatGPT.app` or
-`/Applications/Codex.app`. It creates:
+Neither installer ever modifies `/Applications/ChatGPT.app` or
+`/Applications/Codex.app`. Each creates its own:
 
-- `~/Applications/Codex RTL.app` — a small, stable launcher.
-- `~/Library/Application Support/codex-rtl-patch/runtime/` — the hidden,
-  locally built runtime.
+- a small, stable launcher app under `~/Applications/`;
+- a hidden, locally built runtime under `~/Library/Application Support/`;
 - a per-user LaunchAgent that detects source updates.
 
 ### What happens after an app update
@@ -48,8 +73,9 @@ as a pending runtime and is activated on the next launch.
 
 ### GitHub Release installer
 
-Download `Codex-RTL-Installer-<version>.zip` from Releases, open
-**Install Codex RTL**, and follow the dialog.
+Download `Codex-RTL-Installer-<version>.zip` (or `ChatGPT-RTL-Installer-<version>.zip`
+for the ChatGPT-only product) from Releases, open the **Install …** app, and
+follow the dialog.
 
 For public distribution the release should be signed and notarized. Unsigned
 development builds may require right-click → Open.
@@ -59,25 +85,28 @@ development builds may require right-click → Open.
 ```bash
 git clone https://github.com/aviz85/codex-desktop-rtl-patch.git
 cd codex-desktop-rtl-patch
-./install.sh
+./install.sh            # Codex RTL: detects ChatGPT.app, falls back to Codex.app
+./install-chatgpt.sh     # ChatGPT RTL: ChatGPT.app only, separate from the above
 ```
 
 To explicitly retry a latched compatibility failure after troubleshooting:
 
 ```bash
 ./install.sh --repair
+./install-chatgpt.sh --repair
 ```
 
 No `sudo`, Full Disk Access, certificate installation, or modification of the
 official app is required.
 
-After installation, fully quit the official app and open **Codex RTL** from
-`~/Applications`.
+After installation, fully quit the official app and open **Codex RTL** or
+**ChatGPT RTL** from `~/Applications`.
 
 ## Diagnose macOS
 
 ```bash
-./check-macos.sh
+./check-macos.sh       # Codex RTL
+./check-chatgpt.sh     # ChatGPT RTL
 ```
 
 A healthy runtime reports:
@@ -89,11 +118,8 @@ A healthy runtime reports:
 - valid code signature;
 - matching Electron ASAR integrity.
 
-Logs are stored under:
-
-```text
-~/Library/Logs/codex-rtl-patch/
-```
+Logs are stored under `~/Library/Logs/codex-rtl-patch/` (Codex RTL) or
+`~/Library/Logs/chatgpt-rtl-patch/` (ChatGPT RTL).
 
 If a version is incompatible, the reason is stored locally and the launcher
 continues opening the official app.
@@ -101,11 +127,12 @@ continues opening the official app.
 ## Uninstall macOS
 
 ```bash
-./uninstall.sh
+./uninstall.sh          # removes only Codex RTL
+./uninstall-chatgpt.sh  # removes only ChatGPT RTL
 ```
 
-This removes only the launcher, hidden runtime, manager, state, and LaunchAgent.
-The official app and user data are untouched.
+Each removes only its own launcher, hidden runtime, manager, state, and
+LaunchAgent. The official app, user data, and the other product are untouched.
 
 ## Build a macOS release
 
@@ -124,6 +151,17 @@ Outputs:
 ```text
 dist/Codex-RTL-Installer-0.3.0.zip
 dist/Codex-RTL-Installer-0.3.0.zip.sha256
+```
+
+Build the ChatGPT-only product instead with `CODEX_RTL_BRAND=chatgpt`:
+
+```bash
+VERSION=0.3.0 CODEX_RTL_BRAND=chatgpt ./macos/build-release.sh
+```
+
+```text
+dist/ChatGPT-RTL-Installer-0.3.0.zip
+dist/ChatGPT-RTL-Installer-0.3.0.zip.sha256
 ```
 
 Signed and notarized build:

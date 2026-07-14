@@ -6,16 +6,44 @@ set -u
 MACOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$MACOS_DIR/.." && pwd)"
 
-SUPPORT_DIR="${CODEX_RTL_SUPPORT_DIR:-$HOME/Library/Application Support/codex-rtl-patch}"
+# BRAND selects which official app this tool targets and how the generated
+# launcher/runtime/support files are named. It defaults to "codex", which is
+# the original, unchanged behavior: detect ChatGPT.app or Codex.app (in that
+# order) and brand everything "Codex RTL". Set CODEX_RTL_BRAND=chatgpt to
+# build the dedicated ChatGPT-only "ChatGPT RTL" product instead. The two
+# brands use disjoint support directories, bundle identifiers, LaunchAgent
+# labels, and launcher app names, so installing one never touches the other.
+BRAND="${CODEX_RTL_BRAND:-codex}"
+
+case "$BRAND" in
+  chatgpt)
+    PRODUCT_NAME="ChatGPT RTL"
+    BUNDLE_SLUG="chatgpt-rtl"
+    SUPPORT_SLUG="chatgpt-rtl-patch"
+    TARGET_APPS=("/Applications/ChatGPT.app")
+    ;;
+  codex)
+    PRODUCT_NAME="Codex RTL"
+    BUNDLE_SLUG="codex-rtl"
+    SUPPORT_SLUG="codex-rtl-patch"
+    TARGET_APPS=("/Applications/ChatGPT.app" "/Applications/Codex.app")
+    ;;
+  *)
+    echo "ERROR unknown CODEX_RTL_BRAND: $BRAND (expected 'codex' or 'chatgpt')" >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+esac
+
+SUPPORT_DIR="${CODEX_RTL_SUPPORT_DIR:-$HOME/Library/Application Support/$SUPPORT_SLUG}"
 MANAGER_DIR="${CODEX_RTL_MANAGER_DIR:-$SUPPORT_DIR/manager}"
 RUNTIME_DIR="${CODEX_RTL_RUNTIME_DIR:-$SUPPORT_DIR/runtime}"
 STATE_DIR="${CODEX_RTL_STATE_DIR:-$SUPPORT_DIR/state}"
-LOG_DIR="${CODEX_RTL_LOG_DIR:-$HOME/Library/Logs/codex-rtl-patch}"
+LOG_DIR="${CODEX_RTL_LOG_DIR:-$HOME/Library/Logs/$SUPPORT_SLUG}"
 
-RUNTIME_APP="${CODEX_RTL_RUNTIME_APP:-$RUNTIME_DIR/Codex RTL Runtime.app}"
-PENDING_APP="${CODEX_RTL_PENDING_APP:-$RUNTIME_DIR/Codex RTL Pending.app}"
-PREVIOUS_APP="${CODEX_RTL_PREVIOUS_APP:-$RUNTIME_DIR/Codex RTL Previous.app}"
-LAUNCHER_APP="${CODEX_RTL_LAUNCHER_APP:-$HOME/Applications/Codex RTL.app}"
+RUNTIME_APP="${CODEX_RTL_RUNTIME_APP:-$RUNTIME_DIR/$PRODUCT_NAME Runtime.app}"
+PENDING_APP="${CODEX_RTL_PENDING_APP:-$RUNTIME_DIR/$PRODUCT_NAME Pending.app}"
+PREVIOUS_APP="${CODEX_RTL_PREVIOUS_APP:-$RUNTIME_DIR/$PRODUCT_NAME Previous.app}"
+LAUNCHER_APP="${CODEX_RTL_LAUNCHER_APP:-$HOME/Applications/$PRODUCT_NAME.app}"
 
 CURRENT_STAMP="${CODEX_RTL_CURRENT_STAMP:-$STATE_DIR/current.key}"
 PENDING_STAMP="${CODEX_RTL_PENDING_STAMP:-$STATE_DIR/pending.key}"
@@ -26,9 +54,9 @@ LAUNCH_FAILED_STAMP="${CODEX_RTL_LAUNCH_FAILED_STAMP:-$STATE_DIR/launch-failed.k
 PATCH_JS="${CODEX_RTL_PATCH_JS:-$PROJECT_DIR/src/codex-rtl-patch.js}"
 PROBE_JS="${CODEX_RTL_PROBE_JS:-$MACOS_DIR/probe-renderer.mjs}"
 MIRROR_FORMAT="3"
-RUNTIME_BUNDLE_ID="io.github.aviz85.codex-rtl-runtime"
-LAUNCHER_BUNDLE_ID="io.github.aviz85.codex-rtl-launcher"
-AGENT_LABEL="io.github.aviz85.codex-rtl-update"
+RUNTIME_BUNDLE_ID="io.github.aviz85.$BUNDLE_SLUG-runtime"
+LAUNCHER_BUNDLE_ID="io.github.aviz85.$BUNDLE_SLUG-launcher"
+AGENT_LABEL="io.github.aviz85.$BUNDLE_SLUG-update"
 
 log() { printf '%s\n' "$*"; }
 warn() { printf 'WARN %s\n' "$*" >&2; }
@@ -39,7 +67,7 @@ find_source_app() {
     return 1
   fi
   local app
-  for app in "/Applications/ChatGPT.app" "/Applications/Codex.app"; do
+  for app in "${TARGET_APPS[@]}"; do
     [[ -d "$app" ]] && { printf '%s\n' "$app"; return 0; }
   done
   return 1

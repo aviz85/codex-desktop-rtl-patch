@@ -15,17 +15,17 @@ version="$(cat "$PROJECT_DIR/VERSION" 2>/dev/null || echo 0.0.0)"
 rm -rf "$staging"
 mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Resources" "$(dirname "$LAUNCHER_APP")"
 
-python3 - "$staging/Contents/Info.plist" "$LAUNCHER_BUNDLE_ID" "$version" <<'PY'
+python3 - "$staging/Contents/Info.plist" "$LAUNCHER_BUNDLE_ID" "$version" "$PRODUCT_NAME" <<'PY'
 import plistlib, sys
-path, bundle_id, version = sys.argv[1:4]
+path, bundle_id, version, product_name = sys.argv[1:5]
 data = {
     "CFBundleDevelopmentRegion": "en",
-    "CFBundleDisplayName": "Codex RTL",
-    "CFBundleExecutable": "Codex RTL",
+    "CFBundleDisplayName": product_name,
+    "CFBundleExecutable": product_name,
     "CFBundleIconFile": "AppIcon",
     "CFBundleIdentifier": bundle_id,
     "CFBundleInfoDictionaryVersion": "6.0",
-    "CFBundleName": "Codex RTL",
+    "CFBundleName": product_name,
     "CFBundlePackageType": "APPL",
     "CFBundleShortVersionString": version,
     "CFBundleVersion": version,
@@ -35,7 +35,7 @@ with open(path, "wb") as f:
     plistlib.dump(data, f)
 PY
 
-python3 - "$staging/Contents/MacOS/Codex RTL" "$manager_launch" <<'PY'
+python3 - "$staging/Contents/MacOS/$PRODUCT_NAME" "$manager_launch" <<'PY'
 import io, os, shlex, sys
 path, launcher = sys.argv[1:3]
 body = "#!/bin/bash\nexec " + shlex.quote(launcher) + "\n"

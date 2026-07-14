@@ -1,5 +1,25 @@
 # macOS fail-open architecture
 
+## Brand parameterization
+
+All paths, bundle identifiers, and display names in this doc are for the
+default brand. `macos/common.sh` derives every name from `CODEX_RTL_BRAND`
+(`codex` default, or `chatgpt`):
+
+| | `codex` (default) | `chatgpt` |
+| --- | --- | --- |
+| `TARGET_APPS` | `ChatGPT.app`, `Codex.app` | `ChatGPT.app` only |
+| `PRODUCT_NAME` | `Codex RTL` | `ChatGPT RTL` |
+| bundle id prefix | `io.github.aviz85.codex-rtl-*` | `io.github.aviz85.chatgpt-rtl-*` |
+| support dir | `~/Library/Application Support/codex-rtl-patch/` | `~/Library/Application Support/chatgpt-rtl-patch/` |
+
+`install-chatgpt.sh`, `uninstall-chatgpt.sh`, and `check-chatgpt.sh` at the
+repo root are thin wrappers that export `CODEX_RTL_BRAND=chatgpt` before
+calling the same `macos/*.sh` scripts described below. The two brands never
+share a support directory, bundle id, or LaunchAgent label, so one can be
+installed, repaired, or removed without affecting the other. Do not launch
+both products' launcher apps at once — see README.
+
 ## Invariant
 
 The official application is the recovery path and is never patched. Every

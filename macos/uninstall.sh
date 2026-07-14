@@ -19,4 +19,4 @@ done
 pkill -f "^$RUNTIME_DIR/" 2>/dev/null || true
 rm -rf "$LAUNCHER_APP" "$RUNTIME_DIR" "$STATE_DIR" "$MANAGER_DIR"
 rm -rf "$SUPPORT_DIR/asar-tools"
-echo "OK Codex RTL removed. The official app was not changed."
+echo "OK $PRODUCT_NAME removed. The official app was not changed."

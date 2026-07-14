@@ -21,7 +21,7 @@ done
 
 say() { [[ "$QUIET" == 1 ]] || printf '%s\n' "$*"; }
 fail=0
-source_app="$(find_source_app)" || { say "FAIL official ChatGPT/Codex app not found"; exit 1; }
+source_app="$(find_source_app)" || { say "FAIL none of ${TARGET_APPS[*]} found"; exit 1; }
 expected_key="$(source_key)" || { say "FAIL could not calculate source key"; exit 1; }
 
 source_version="$(plist_value "$source_app" CFBundleShortVersionString)"

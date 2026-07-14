@@ -18,7 +18,7 @@ for arg in "$@"; do
   esac
 done
 
-source_app="$(find_source_app)" || { echo "ERROR official ChatGPT/Codex app not found" >&2; exit 1; }
+source_app="$(find_source_app)" || { echo "ERROR none of ${TARGET_APPS[*]} found" >&2; exit 1; }
 [[ -f "$PATCH_JS" ]] || { echo "ERROR patch source not found: $PATCH_JS" >&2; exit 1; }
 [[ -f "$PROBE_JS" ]] || { echo "ERROR renderer probe not found: $PROBE_JS" >&2; exit 1; }
 ensure_node || { echo "ERROR Node.js 22+ or the bundled runtime is required" >&2; exit 1; }
@@ -70,7 +70,7 @@ if [[ ! -x "$asar_bin" ]]; then
 fi
 [[ -x "$asar_bin" ]] || { echo "ERROR could not prepare @electron/asar" >&2; exit 1; }
 
-build_app="$RUNTIME_DIR/Codex RTL Runtime.building.app"
+build_app="$RUNTIME_DIR/$PRODUCT_NAME Runtime.building.app"
 build_stamp="$STATE_DIR/building.key"
 work=""
 smoke_profile=""
@@ -88,7 +88,7 @@ cleanup() {
     printf '%s' "$key" > "$FAILED_STAMP"
     printf '%s\n' "$failure_reason" > "$FAILED_REASON"
     warn "$failure_reason; RTL disabled for this version."
-    [[ "$NOTIFY" == 1 ]] && notify_user "Codex RTL" "RTL disabled for this version; opening the official app remains safe."
+    [[ "$NOTIFY" == 1 ]] && notify_user "$PRODUCT_NAME" "RTL disabled for this version; opening the official app remains safe."
   fi
   rm -rf "$lock_dir" || true
   return "$rc"
@@ -151,10 +151,10 @@ PY
 fi
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $RUNTIME_BUNDLE_ID" "$build_plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleName Codex RTL" "$build_plist" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleName string 'Codex RTL'" "$build_plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Codex RTL" "$build_plist" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'Codex RTL'" "$build_plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName $PRODUCT_NAME" "$build_plist" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleName string '$PRODUCT_NAME'" "$build_plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $PRODUCT_NAME" "$build_plist" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string '$PRODUCT_NAME'" "$build_plist"
 /usr/libexec/PlistBuddy -c "Set :SUEnableAutomaticChecks false" "$build_plist" 2>/dev/null \
   || /usr/libexec/PlistBuddy -c "Add :SUEnableAutomaticChecks bool false" "$build_plist"
 /usr/libexec/PlistBuddy -c "Set :SUAutomaticallyUpdate false" "$build_plist" 2>/dev/null \
@@ -226,5 +226,5 @@ fi
 
 rm -f "$FAILED_STAMP" "$FAILED_REASON" "$LAUNCH_FAILED_STAMP"
 success=1
-[[ "$NOTIFY" == 1 ]] && notify_user "Codex RTL" "A validated RTL runtime is ready."
+[[ "$NOTIFY" == 1 ]] && notify_user "$PRODUCT_NAME" "A validated RTL runtime is ready."
 exit 0

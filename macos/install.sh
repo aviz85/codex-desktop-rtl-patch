@@ -14,7 +14,7 @@ done
 
 # shellcheck source=common.sh
 source "$SCRIPT_DIR/common.sh"
-find_source_app >/dev/null || { echo "ERROR Install ChatGPT/Codex first." >&2; exit 1; }
+find_source_app >/dev/null || { echo "ERROR ${TARGET_APPS[*]} not found; install one of them first." >&2; exit 1; }
 
 # Stop an older manager before replacing its files or starting the initial
 # build. The updated agent is loaded again only after installation completes.
@@ -54,7 +54,7 @@ if "$manager_macos/build-runtime.sh" "${build_args[@]}"; then build_ok=1; fi
 
 if [[ "$build_ok" == 1 ]]; then
   echo
-  echo "Installed. Fully quit the official app, then open Codex RTL from ~/Applications."
+  echo "Installed. Fully quit the official app, then open $PRODUCT_NAME from ~/Applications."
   exit 0
 fi
 
