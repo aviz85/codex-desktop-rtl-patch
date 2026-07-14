@@ -1,203 +1,202 @@
 # Codex Desktop RTL Patch
 
-Unofficial local RTL patch for Codex Desktop on **Windows and macOS**.
+Unofficial RTL support for Hebrew, Arabic, and mixed-direction text in Codex
+Desktop. Code blocks, terminals, Monaco/CodeMirror, and syntax-highlighted
+content remain left-to-right.
 
-This patch improves Hebrew, Arabic, and mixed right-to-left text rendering in
-Codex Desktop while keeping code blocks, inline code, terminals, and editor-like
-surfaces left-to-right.
+This repository supports:
 
-> **macOS support** was added in this fork. The RTL patch logic
-> (`src/codex-rtl-patch.js`) is shared across platforms; only the installer
-> differs. See [macOS](#macos) below. Windows instructions are unchanged.
+- **macOS:** fail-open launcher plus an isolated, locally built RTL runtime.
+- **Windows:** local copied runtime installed by `install.ps1`.
 
-## What It Does
+The official OpenAI app is never redistributed.
 
-- Detects Hebrew/Arabic text and applies `dir="rtl"` where appropriate.
-- Uses `unicode-bidi: plaintext` for mixed Hebrew/English paragraphs.
-- Keeps `pre`, `code`, terminal, Monaco/CodeMirror-like, and syntax-highlighted
-  content left-to-right.
-- Switches the Codex composer direction while typing.
-- Installs into a local copy of Codex instead of modifying the official app.
+## macOS: safety first
 
-## What It Does Not Do
+The macOS design has one non-negotiable rule:
 
-This project intentionally does **not**:
+> If RTL compatibility cannot be proven, open the official app without RTL.
 
-- edit files under `C:\Program Files\WindowsApps`
-- replace hashes inside executables
-- install certificates
-- change Windows Trusted Root stores
-- redistribute Codex or any OpenAI app files
+The installer never modifies `/Applications/ChatGPT.app` or
+`/Applications/Codex.app`. It creates:
 
-The installer copies the locally installed Codex app to:
+- `~/Applications/Codex RTL.app` — a small, stable launcher.
+- `~/Library/Application Support/codex-rtl-patch/runtime/` — the hidden,
+  locally built runtime.
+- a per-user LaunchAgent that detects source updates.
 
-```powershell
-%LOCALAPPDATA%\OpenAI\CodexRtl\app
-```
+### What happens after an app update
 
-Then it patches only the copied `resources\app.asar` and creates a desktop
-shortcut named `Codex RTL`.
+1. The official app updates normally.
+2. A new RTL runtime is built in a temporary directory.
+3. The patch is embedded into the webview's loaded JavaScript bundle.
+4. ASAR integrity is recalculated and the isolated copy is ad-hoc signed.
+5. A real renderer smoke test verifies:
+   - the patch loaded;
+   - Hebrew resolves to RTL;
+   - code remains LTR.
+6. Only a passing build is activated atomically.
+7. If anything fails, that app/patch combination is latched as incompatible.
+   Further automatic retries stop until either the official app or patch
+   changes.
+8. The launcher opens the official app.
 
-## Requirements
+A running RTL session is never killed for an update. A validated rebuild waits
+as a pending runtime and is activated on the next launch.
 
-- Windows.
-- Codex Desktop installed.
-- Node.js 22+ with `npx` available.
+## Install on macOS
 
-Check:
+### GitHub Release installer
 
-```powershell
-node --version
-npx.cmd --version
-```
+Download `Codex-RTL-Installer-<version>.zip` from Releases, open
+**Install Codex RTL**, and follow the dialog.
 
-## Install From GitHub
+For public distribution the release should be signed and notarized. Unsigned
+development builds may require right-click → Open.
 
-Close the regular Codex app first.
-
-Run in PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/main/install.ps1 | iex
-```
-
-Then open Codex from the new desktop shortcut:
-
-```text
-Codex RTL
-```
-
-If the regular Codex app is still running, Windows/Electron may reuse the
-existing instance. Close all Codex windows and launch `Codex RTL` again.
-
-## Install From a Clone
-
-```powershell
-git clone https://github.com/mnigli/codex-desktop-rtl-patch.git
-cd codex-desktop-rtl-patch
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-## Dry Run
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DryRun
-```
-
-## Update After Codex Updates
-
-When Codex updates, rerun the installer:
-
-```powershell
-irm https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/main/install.ps1 | iex
-```
-
-The installer mirrors the current official Codex app into the local RTL copy
-and reapplies the patch.
-
-## Uninstall
-
-From a clone:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
-```
-
-Or manually remove:
-
-```powershell
-Remove-Item "$env:LOCALAPPDATA\OpenAI\CodexRtl" -Recurse -Force
-Remove-Item "$([Environment]::GetFolderPath('Desktop'))\Codex RTL.lnk" -Force
-```
-
-Uninstall removes only the local RTL copy and shortcut. It does not remove or
-modify the official Codex installation.
-
-## macOS
-
-The macOS installer patches the app **in place** under `/Applications/Codex.app`
-and keeps timestamped backups, so it is fully reversible. It does not copy,
-re-sign, or redistribute Codex.
-
-### Requirements
-
-- macOS.
-- Codex Desktop installed (`/Applications/Codex.app`).
-- Node.js 22+ with `npm` (ships with Node).
-
-### Install
+### From a reviewed clone
 
 ```bash
 git clone https://github.com/aviz85/codex-desktop-rtl-patch.git
 cd codex-desktop-rtl-patch
-chmod +x install.sh uninstall.sh
 ./install.sh
 ```
 
-Options: `./install.sh --dry-run` (change nothing), `./install.sh --no-launch`,
-or `CODEX_APP=/path/to/Codex.app ./install.sh` to override the app location.
-
-### How it works on macOS
-
-1. Quits Codex if running.
-2. Backs up `app.asar` and `Info.plist` **outside the bundle**, in
-   `~/Library/Application Support/codex-rtl-patch/` (once). Backups must not live
-   inside `Contents/` — a stray file there invalidates the code signature.
-3. Extracts the asar, drops `codex-rtl-patch.js` into `webview/assets/`, and
-   references it from `webview/index.html`, then repacks the asar.
-4. **Recomputes the Electron ASAR integrity hash.** macOS Electron builds embed
-   the expected asar header hash in `Info.plist`
-   (`ElectronAsarIntegrity → Resources/app.asar → hash`) and abort on launch
-   (SIGTRAP) if the asar changed. The installer computes the new `sha256` of the
-   patched asar **header string** and writes it back to `Info.plist`.
-5. **Re-signs the app (ad-hoc).** Editing `app.asar` + `Info.plist` breaks the
-   code signature; on Apple Silicon / hardened-runtime builds macOS then refuses
-   to launch ("Codex can't be opened"). The installer re-signs the top level only
-   (nested OpenAI frameworks keep their signatures) with
-   `disable-library-validation` so the now-ad-hoc main process can still load
-   OpenAI's Electron Framework. `spctl` will report "rejected" afterwards — that
-   is expected and harmless for an unquarantined local app.
-6. Relaunches Codex.
-
-Run `./check-macos.sh` any time to confirm the patched app is launch-safe
-(signature valid + integrity hashes match + patch present).
-
-> The installer is written to parse and run on macOS's stock `bash` 3.2.
-
-A harmless `Keychain lookup failed (errSecAuthFailed)` line may appear in the
-logs — it is a side effect of modifying a signed bundle and does not affect
-Codex sign-in (Codex auth lives in `~/.codex`, not the Chromium keychain).
-
-### Update after Codex updates
-
-A Codex auto-update overwrites `app.asar` and reverts the patch. Either re-run
-`./install.sh`, or install the **auto-patch agent** so it re-applies automatically:
+To explicitly retry a latched compatibility failure after troubleshooting:
 
 ```bash
-cd autopatch
-chmod +x install-autopatch.sh uninstall-autopatch.sh
-./install-autopatch.sh
+./install.sh --repair
 ```
 
-This installs a LaunchAgent that watches `app.asar`. **By default it only detects
-updates and notifies you** (run `./install.sh` once after the notification) —
-macOS 14+ App Management protection blocks a background agent from rewriting an
-app in `/Applications`. For **fully automatic** re-applying, grant the agent's
-`/bin/bash` a one-time **Full Disk Access** (designed-but-not-yet-end-to-end-
-verified). See [`autopatch/README.md`](autopatch/README.md).
+No `sudo`, Full Disk Access, certificate installation, or modification of the
+official app is required.
 
-### Uninstall (macOS)
+After installation, fully quit the official app and open **Codex RTL** from
+`~/Applications`.
+
+## Diagnose macOS
+
+```bash
+./check-macos.sh
+```
+
+A healthy runtime reports:
+
+- matching source/runtime versions;
+- isolated bundle identity;
+- embedded RTL code;
+- current app + patch stamp;
+- valid code signature;
+- matching Electron ASAR integrity.
+
+Logs are stored under:
+
+```text
+~/Library/Logs/codex-rtl-patch/
+```
+
+If a version is incompatible, the reason is stored locally and the launcher
+continues opening the official app.
+
+## Uninstall macOS
 
 ```bash
 ./uninstall.sh
 ```
 
-This restores the original `app.asar` and `Info.plist` from the backups and
-relaunches the unpatched app.
+This removes only the launcher, hidden runtime, manager, state, and LaunchAgent.
+The official app and user data are untouched.
 
-## Safety Notice
+## Build a macOS release
 
-This is an unofficial patch. Codex UI internals may change, so the patch can
-break after app updates. Reinstalling the patch after a Codex update is expected.
+Requirements for the release machine:
 
-Use at your own risk.
+- macOS;
+- Node.js and npm;
+- optional Apple Developer ID credentials for public distribution.
+
+```bash
+VERSION=0.3.0 ./macos/build-release.sh
+```
+
+Outputs:
+
+```text
+dist/Codex-RTL-Installer-0.3.0.zip
+dist/Codex-RTL-Installer-0.3.0.zip.sha256
+```
+
+Signed and notarized build:
+
+```bash
+VERSION=0.3.0 \
+CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+NOTARY_PROFILE="codex-rtl-notary" \
+./macos/build-release.sh
+```
+
+The release vendors the pinned `@electron/asar` dependency. End users do not
+need npm; the installer can use the Node runtime bundled with current
+ChatGPT/Codex builds.
+
+See [macOS architecture](docs/MACOS-ARCHITECTURE.md) and
+[release guide](docs/RELEASING-MACOS.md).
+
+## Windows
+
+Windows uses a separate copied runtime under:
+
+```text
+%LOCALAPPDATA%\OpenAI\CodexRtl
+```
+
+From a reviewed clone:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Remove it with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall.ps1
+```
+
+The Windows scripts remain independent of the macOS fail-open manager.
+
+## Tests
+
+```bash
+node tests/rtl-direction.test.js
+tests/macos-fail-open.test.sh
+tests/macos-build-lock.test.sh
+tests/macos-safety-contract.test.sh
+```
+
+GitHub Actions runs the JavaScript tests on Node 22 and the safety/launcher
+tests on macOS.
+
+## Security boundaries
+
+This project does not:
+
+- modify the official OpenAI application;
+- redistribute OpenAI binaries;
+- install a privileged daemon;
+- request Full Disk Access;
+- install certificates;
+- disable Gatekeeper or System Integrity Protection;
+- download and execute an unpinned remote patch during normal updates.
+
+The isolated runtime is built exclusively from the user's locally installed
+official app and the reviewed patch shipped with this package.
+
+## Limitations
+
+Codex UI internals are not a public compatibility API. A future release can
+disable RTL until this project is updated. That is an expected safe outcome:
+the official application must continue to open normally.
+
+## License
+
+MIT. This is an independent community project and is not an OpenAI product.

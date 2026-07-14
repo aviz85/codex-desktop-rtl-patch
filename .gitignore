@@ -9,6 +9,8 @@ app/
 *.tmp
 tmp/
 temp/
+dist/
+vendor/
 
 # OS/editor noise
 .DS_Store

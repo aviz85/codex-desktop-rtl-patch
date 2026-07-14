@@ -2,7 +2,4 @@
 # Compatibility wrapper for pre-0.3 installations.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if [[ "${1:-}" == "--remove" ]]; then
-  exec "$ROOT/macos/uninstall.sh"
-fi
-exec "$ROOT/macos/install-agent.sh"
+exec "$ROOT/macos/check-runtime.sh" "$@"

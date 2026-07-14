@@ -5,18 +5,17 @@
 
   if (typeof document === "undefined") return;
   if (window.__codexRtlPatchVersion) return;
-  window.__codexRtlPatchVersion = "0.1.0";
+  window.__codexRtlPatchVersion = "0.3.0";
 
   var RTL_SPLIT_FLAG = "data-codex-rtl-plaintext";
+  var MANAGED_FLAG = "data-codex-rtl-managed";
   var STYLE_ID = "codex-rtl-patch-styles";
-  var INPUT_SEL =
-    ".ProseMirror, [contenteditable=\"true\"], textarea, input[type=\"text\"], input:not([type])";
+  var INPUT_SEL = ".ProseMirror";
   var CODE_SEL =
     "pre, code, kbd, samp, .cm-editor, .monaco-editor, .xterm, [class*=\"language-\"]";
   var TEXT_SEL =
-    "p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, summary, label, dt, dd";
-  var LEAF_SEL =
-    "div, span, button, a, label";
+    "p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, summary, dt, dd";
+  var LEAF_SEL = "div, span";
 
   function isRTLChar(ch) {
     var code = ch.charCodeAt(0);
@@ -30,14 +29,6 @@
     );
   }
 
-  function hasRTL(text) {
-    if (!text) return false;
-    for (var i = 0; i < text.length; i += 1) {
-      if (isRTLChar(text[i])) return true;
-    }
-    return false;
-  }
-
   function firstStrong(text) {
     if (!text) return null;
     for (var i = 0; i < text.length; i += 1) {
@@ -47,22 +38,12 @@
     return null;
   }
 
-  function stripLeadingLTRNoise(text) {
-    return (text || "")
-      .replace(/^[\s]*(?:[\w.-]+\.[\w]{1,8})\s*/g, "")
-      .replace(/https?:\/\/\S+/g, "")
-      .replace(/[\w.-]+[\/\\][\w.\/\\-]+/g, "")
-      .replace(/`[^`]+`/g, "")
-      .replace(/\$[A-Za-z_][\w-]*/g, "");
-  }
-
   function detectTextDir(text) {
     if (!text || !text.trim()) return null;
-    var direct = firstStrong(text);
-    if (direct === "rtl") return "rtl";
-    if (!hasRTL(text)) return "ltr";
-    var stripped = firstStrong(stripLeadingLTRNoise(text));
-    return stripped === "rtl" ? "rtl" : "rtl";
+    for (var i = 0; i < text.length; i += 1) {
+      if (isRTLChar(text[i])) return "rtl";
+    }
+    return firstStrong(text);
   }
 
   function textWithoutCode(el) {
@@ -84,13 +65,7 @@
   }
 
   function detectElementDir(el) {
-    var full = el.textContent || "";
-    if (!hasRTL(full)) return null;
-    var noCode = textWithoutCode(el);
-    var direct = firstStrong(noCode);
-    if (direct === "rtl") return "rtl";
-    var stripped = firstStrong(stripLeadingLTRNoise(noCode));
-    return stripped === "rtl" ? "rtl" : "rtl";
+    return detectTextDir(textWithoutCode(el));
   }
 
   function qsa(root, selector) {
@@ -110,19 +85,34 @@
     );
   }
 
-  function applyDir(el, dir) {
-    if (!dir) {
-      if (el.hasAttribute("dir")) el.removeAttribute("dir");
-      el.style.direction = "";
-      el.style.textAlign = "";
+  function clearDir(el) {
+    if (
+      !el.hasAttribute(MANAGED_FLAG) &&
+      !el.hasAttribute(RTL_SPLIT_FLAG)
+    ) {
       return;
     }
+
+    el.removeAttribute(MANAGED_FLAG);
+    el.removeAttribute(RTL_SPLIT_FLAG);
+    el.removeAttribute("dir");
+    el.style.direction = "";
+    el.style.textAlign = "";
+    el.style.unicodeBidi = "";
+    el.style.listStylePosition = "";
+  }
+
+  function applyDir(el, dir, align) {
+    clearDir(el);
+    if (!dir) return;
+
+    el.setAttribute(MANAGED_FLAG, "1");
     el.setAttribute("dir", dir);
     el.style.direction = dir;
-    el.style.textAlign = "start";
+    el.style.textAlign = align || "start";
     if (dir === "rtl") {
       el.setAttribute(RTL_SPLIT_FLAG, "1");
-      el.style.unicodeBidi = "plaintext";
+      el.style.unicodeBidi = "isolate";
     }
   }
 
@@ -139,39 +129,21 @@
     qsa(root, TEXT_SEL).forEach(function (el) {
       if (isEditable(el) || el.closest(CODE_SEL)) return;
       var dir = detectElementDir(el);
-      if (dir) {
-        applyDir(el, dir);
-        if (el.tagName === "LI" && dir === "rtl") {
-          el.style.listStylePosition = "inside";
-          var list = el.closest("ul, ol");
-          if (list && !list.hasAttribute("dir")) applyDir(list, "rtl");
-        }
-      } else {
-        applyDir(el, null);
-        if (el.tagName === "LI") el.style.listStylePosition = "";
-      }
-    });
-
-    qsa(root, "ul, ol").forEach(function (el) {
-      if (isEditable(el) || el.closest(CODE_SEL)) return;
-      var dir = detectElementDir(el);
       if (dir === "rtl") applyDir(el, "rtl");
-      else applyDir(el, null);
+      else clearDir(el);
     });
   }
 
   function processLeafContainers(root) {
     qsa(root, LEAF_SEL).forEach(function (el) {
       if (isEditable(el) || el.closest(CODE_SEL)) return;
-      if (el.hasAttribute(RTL_SPLIT_FLAG)) return;
+      var managedAncestor = el.parentElement &&
+        el.parentElement.closest("[" + MANAGED_FLAG + "]");
+      if (managedAncestor) return;
       if (hasBlockChild(el)) return;
-      if (/^(P|LI|H[1-6]|BLOCKQUOTE|TD|TH|UL|OL|PRE|CODE)$/.test(el.tagName)) {
-        return;
-      }
-      var text = (el.textContent || "").trim();
-      if (text.length < 2) return;
-      if (hasRTL(text)) applyDir(el, detectTextDir(text) || "rtl");
-      else if (el.hasAttribute("dir")) applyDir(el, null);
+      var dir = detectElementDir(el);
+      if (dir === "rtl") applyDir(el, "rtl");
+      else clearDir(el);
     });
   }
 
@@ -181,15 +153,12 @@
       var text = el.value || el.textContent || el.innerText || "";
       var dir = detectTextDir(text);
       if (dir === "rtl") {
-        el.setAttribute("dir", "rtl");
-        el.style.direction = "rtl";
-        el.style.textAlign = "right";
+        applyDir(el, "rtl", "right");
+      } else if (dir === "ltr") {
+        applyDir(el, "ltr", "left");
       } else {
-        el.setAttribute("dir", "ltr");
-        el.style.direction = "ltr";
-        el.style.textAlign = "left";
+        clearDir(el);
       }
-      el.style.unicodeBidi = "plaintext";
     });
   }
 
@@ -198,15 +167,12 @@
     var style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = [
-      "#root :where(p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,summary,label,dt,dd):not([dir]){unicode-bidi:plaintext!important;text-align:start!important}",
+      "#root{direction:ltr}",
       "#root :where(pre,code,kbd,samp,.cm-editor,.monaco-editor,.xterm,[class*=\"language-\"]){direction:ltr!important;text-align:left!important}",
       "#root code{unicode-bidi:isolate!important}",
       "#root pre{unicode-bidi:embed!important}",
-      "#root .ProseMirror{unicode-bidi:plaintext!important;text-align:start!important}",
-      "#root .ProseMirror[dir=\"rtl\"]{direction:rtl!important;text-align:right!important}",
-      "#root [dir=\"rtl\"]{direction:rtl!important}",
-      "#root [dir=\"ltr\"]{direction:ltr!important}",
-      "#root [data-codex-rtl-plaintext=\"1\"]{unicode-bidi:plaintext!important;text-align:start!important}"
+      "#root .ProseMirror[data-codex-rtl-managed=\"1\"]{unicode-bidi:isolate!important}",
+      "#root [data-codex-rtl-plaintext=\"1\"]{unicode-bidi:isolate!important;text-align:start!important}"
     ].join("");
     document.head.appendChild(style);
   }

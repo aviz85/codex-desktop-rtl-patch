@@ -1,0 +1,25 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tests/rtl-direction.test.js
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: chmod +x macos/*.sh tests/*.sh
+      - run: for file in macos/*.sh; do bash -n "$file"; done
+      - run: tests/macos-fail-open.test.sh
+      - run: tests/macos-build-lock.test.sh
+      - run: tests/macos-safety-contract.test.sh
