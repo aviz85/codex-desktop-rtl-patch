@@ -16,13 +16,17 @@ for app in "${TARGET_APPS[@]}"; do
   watch_paths+=("$app/Contents/Info.plist")
 done
 
-python3 - "$plist" "$AGENT_LABEL" "$build_script" "$LOG_DIR/update-agent.log" "${watch_paths[@]}" <<'PY'
+python3 - "$plist" "$AGENT_LABEL" "$build_script" "$LOG_DIR/update-agent.log" "$BRAND" "${watch_paths[@]}" <<'PY'
 import plistlib, sys
-path, label, build_script, log = sys.argv[1:5]
-watch_paths = sys.argv[5:]
+path, label, build_script, log, brand = sys.argv[1:6]
+watch_paths = sys.argv[6:]
 data = {
     "Label": label,
     "ProgramArguments": ["/bin/bash", build_script, "--if-needed", "--notify"],
+    # BRAND must be baked in here: launchd does not inherit the installing
+    # shell's environment, so without this every automatic rebuild silently
+    # falls back to the "codex" default brand and targets the wrong app/paths.
+    "EnvironmentVariables": {"CODEX_RTL_BRAND": brand},
     "WatchPaths": watch_paths,
     "RunAtLoad": True,
     "StartInterval": 3600,

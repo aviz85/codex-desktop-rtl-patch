@@ -35,10 +35,16 @@ with open(path, "wb") as f:
     plistlib.dump(data, f)
 PY
 
-python3 - "$staging/Contents/MacOS/$PRODUCT_NAME" "$manager_launch" <<'PY'
+python3 - "$staging/Contents/MacOS/$PRODUCT_NAME" "$manager_launch" "$BRAND" <<'PY'
 import io, os, shlex, sys
-path, launcher = sys.argv[1:3]
-body = "#!/bin/bash\nexec " + shlex.quote(launcher) + "\n"
+path, launcher, brand = sys.argv[1:4]
+# BRAND must be baked in here: a double-clicked .app has no shell env, so
+# without this the launcher silently falls back to the "codex" default brand.
+body = (
+    "#!/bin/bash\n"
+    f"export CODEX_RTL_BRAND={shlex.quote(brand)}\n"
+    "exec " + shlex.quote(launcher) + "\n"
+)
 io.open(path, "w", encoding="utf-8").write(body)
 os.chmod(path, 0o755)
 PY
