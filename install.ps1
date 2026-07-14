@@ -62,6 +62,22 @@ function Get-CodexPackage {
     throw 'OpenAI.Codex package was not found. Install Codex Desktop first.'
 }
 
+function Get-AppExecutable([string]$AppDir) {
+    # OpenAI renamed the merged app's display name/icon to "ChatGPT" on both
+    # macOS and Windows while keeping the underlying AppX package identity
+    # ("OpenAI.Codex") stable (see openai/codex issues #32464, #32772). The
+    # macOS bundle's main executable was renamed from "Codex" to "ChatGPT" as
+    # part of that merge; this tries both names defensively since it has not
+    # been verified against a real post-merge Windows install.
+    foreach ($name in @('ChatGPT.exe', 'Codex.exe')) {
+        $candidate = Join-Path $AppDir $name
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+    throw "Neither ChatGPT.exe nor Codex.exe was found under: $AppDir"
+}
+
 function Get-NpxCommand {
     $cmd = Get-Command 'npx.cmd' -ErrorAction SilentlyContinue
     if (-not $cmd) { $cmd = Get-Command 'npx' -ErrorAction SilentlyContinue }
@@ -213,15 +229,12 @@ function Patch-Asar([string]$AppDir, [string]$Npx) {
 }
 
 function New-CodexShortcut([string]$AppDir) {
-    $exe = Join-Path $AppDir 'Codex.exe'
     if ($DryRun) {
-        Write-Host "DRY RUN create shortcut $ShortcutPath -> $exe"
+        Write-Host "DRY RUN create shortcut $ShortcutPath -> $(Join-Path $AppDir '(ChatGPT|Codex).exe')"
         return
     }
 
-    if (-not (Test-Path -LiteralPath $exe)) {
-        throw "Patched Codex.exe was not found: $exe"
-    }
+    $exe = Get-AppExecutable $AppDir
 
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($ShortcutPath)
@@ -287,5 +300,5 @@ if ($DryRun) {
 }
 
 if ($Launch -and -not $DryRun) {
-    Start-Process -FilePath (Join-Path $TargetAppDir 'Codex.exe') -WorkingDirectory $TargetAppDir
+    Start-Process -FilePath (Get-AppExecutable $TargetAppDir) -WorkingDirectory $TargetAppDir
 }

@@ -23,3 +23,23 @@ jobs:
       - run: tests/macos-fail-open.test.sh
       - run: tests/macos-build-lock.test.sh
       - run: tests/macos-safety-contract.test.sh
+
+  windows-syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse install.ps1 and uninstall.ps1 (syntax only, no execution)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($file in @('install.ps1', 'uninstall.ps1')) {
+            Write-Host "Parsing $file"
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file), [ref]$null, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              throw "$($errors.Count) syntax error(s) in $file"
+            }
+            Write-Host "OK $file has no syntax errors"
+          }
