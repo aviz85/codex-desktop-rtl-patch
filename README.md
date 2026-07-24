@@ -37,6 +37,35 @@ Do not run both launcher apps at the same time: they build isolated runtime
 copies of the same underlying app and would race for the same user profile
 data if opened simultaneously.
 
+## Updating when a new version arrives
+
+No terminal, no reinstall. When the app tells you an update is available:
+
+1. **Ignore the update prompt inside Codex RTL / ChatGPT RTL.** The RTL
+   copy's built-in updater is intentionally disabled — updating from inside
+   it will never work, and that is by design.
+2. **Fully quit the RTL app** (⌘Q).
+3. **Open the official app** (`ChatGPT` from `/Applications`), let it update
+   itself as usual, then fully quit it (⌘Q).
+4. **Wait a few minutes.** The background agent notices the update on its
+   own, rebuilds the RTL runtime, and verifies it with a real smoke test.
+5. **Open Codex RTL / ChatGPT RTL again.** You're back, with RTL, on the new
+   version.
+
+If step 5 opens the official app with a message like "No compatible RTL
+runtime is available", the rebuild simply hasn't finished yet — quit and try
+again a few minutes later. Opening the RTL launcher also nudges the rebuild
+to start immediately, so retrying is harmless.
+
+If it still falls back to the official app after an hour, the new version is
+probably incompatible with the current patch (see
+[Limitations](#limitations)). The safe outcome is exactly what you're seeing:
+the official app keeps working without RTL until this project ships an
+update.
+
+**Windows:** there is no background agent. After the official app updates,
+re-run the installer (`install.ps1`) once to rebuild the RTL copy.
+
 ## macOS: safety first
 
 The macOS design has one non-negotiable rule:
